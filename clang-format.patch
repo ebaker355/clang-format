@@ -1,0 +1,121 @@
+Index: docs/ClangFormatStyleOptions.rst
+===================================================================
+--- docs/ClangFormatStyleOptions.rst	(revision 240024)
++++ docs/ClangFormatStyleOptions.rst	(working copy)
+@@ -410,6 +410,10 @@
+   Add a space after ``@property`` in Objective-C, i.e. use
+   ``\@property (readonly)`` instead of ``\@property(readonly)``.
+
++**ObjCSpaceBeforeMethodDeclaration** (``bool``)
++  Add a space before an Objective-C method declaration, i.e. use
++  ``- (void) method`` instead of ``- (void)method``.
++
+ **ObjCSpaceBeforeProtocolList** (``bool``)
+   Add a space in front of an Objective-C protocol list, i.e. use
+   ``Foo <Protocol>`` instead of ``Foo<Protocol>``.
+Index: include/clang/Format/Format.h
+===================================================================
+--- include/clang/Format/Format.h	(revision 240024)
++++ include/clang/Format/Format.h	(working copy)
+@@ -226,6 +226,10 @@
+   /// <tt>\@property (readonly)</tt> instead of <tt>\@property(readonly)</tt>.
+   bool ObjCSpaceAfterProperty;
+
++  /// \brief Add a space before an Objective-C method declaration, i.e. use
++  /// <tt>- (void) method</tt> instead of <tt>- (void)method</tt>.
++  bool ObjCSpaceBeforeMethodDeclaration;
++
+   /// \brief Add a space in front of an Objective-C protocol list, i.e. use
+   /// <tt>Foo <Protocol></tt> instead of \c Foo<Protocol>.
+   bool ObjCSpaceBeforeProtocolList;
+@@ -468,6 +472,7 @@
+            NamespaceIndentation == R.NamespaceIndentation &&
+            ObjCBlockIndentWidth == R.ObjCBlockIndentWidth &&
+            ObjCSpaceAfterProperty == R.ObjCSpaceAfterProperty &&
++           ObjCSpaceBeforeMethodDeclaration == R.ObjCSpaceBeforeMethodDeclaration &&
+            ObjCSpaceBeforeProtocolList == R.ObjCSpaceBeforeProtocolList &&
+            PenaltyBreakComment == R.PenaltyBreakComment &&
+            PenaltyBreakFirstLessLess == R.PenaltyBreakFirstLessLess &&
+Index: lib/Format/Format.cpp
+===================================================================
+--- lib/Format/Format.cpp	(revision 240024)
++++ lib/Format/Format.cpp	(working copy)
+@@ -221,6 +221,7 @@
+     IO.mapOptional("NamespaceIndentation", Style.NamespaceIndentation);
+     IO.mapOptional("ObjCBlockIndentWidth", Style.ObjCBlockIndentWidth);
+     IO.mapOptional("ObjCSpaceAfterProperty", Style.ObjCSpaceAfterProperty);
++    IO.mapOptional("ObjCSpaceBeforeMethodDeclaration", Style.ObjCSpaceBeforeMethodDeclaration);
+     IO.mapOptional("ObjCSpaceBeforeProtocolList",
+                    Style.ObjCSpaceBeforeProtocolList);
+     IO.mapOptional("PenaltyBreakBeforeFirstCallParameter",
+@@ -367,6 +368,7 @@
+   LLVMStyle.NamespaceIndentation = FormatStyle::NI_None;
+   LLVMStyle.ObjCBlockIndentWidth = 2;
+   LLVMStyle.ObjCSpaceAfterProperty = false;
++  LLVMStyle.ObjCSpaceBeforeMethodDeclaration = false;
+   LLVMStyle.ObjCSpaceBeforeProtocolList = true;
+   LLVMStyle.PointerAlignment = FormatStyle::PAS_Right;
+   LLVMStyle.SpacesBeforeTrailingComments = 1;
+@@ -409,6 +411,7 @@
+   GoogleStyle.IndentCaseLabels = true;
+   GoogleStyle.KeepEmptyLinesAtTheStartOfBlocks = false;
+   GoogleStyle.ObjCSpaceAfterProperty = false;
++  GoogleStyle.ObjCSpaceBeforeMethodDeclaration = false;
+   GoogleStyle.ObjCSpaceBeforeProtocolList = false;
+   GoogleStyle.PointerAlignment = FormatStyle::PAS_Left;
+   GoogleStyle.SpacesBeforeTrailingComments = 2;
+@@ -467,6 +470,7 @@
+   MozillaStyle.DerivePointerAlignment = true;
+   MozillaStyle.IndentCaseLabels = true;
+   MozillaStyle.ObjCSpaceAfterProperty = true;
++  MozillaStyle.ObjCSpaceBeforeMethodDeclaration = false;
+   MozillaStyle.ObjCSpaceBeforeProtocolList = false;
+   MozillaStyle.PenaltyReturnTypeOnItsOwnLine = 200;
+   MozillaStyle.PointerAlignment = FormatStyle::PAS_Left;
+@@ -489,6 +493,7 @@
+   Style.NamespaceIndentation = FormatStyle::NI_Inner;
+   Style.ObjCBlockIndentWidth = 4;
+   Style.ObjCSpaceAfterProperty = true;
++  Style.ObjCSpaceBeforeMethodDeclaration = false;
+   Style.PointerAlignment = FormatStyle::PAS_Left;
+   Style.Standard = FormatStyle::LS_Cpp03;
+   return Style;
+Index: lib/Format/TokenAnnotator.cpp
+===================================================================
+--- lib/Format/TokenAnnotator.cpp	(revision 240024)
++++ lib/Format/TokenAnnotator.cpp	(working copy)
+@@ -1920,9 +1920,19 @@
+   if (Line.Type == LT_ObjCMethodDecl) {
+     if (Left.is(TT_ObjCMethodSpecifier))
+       return true;
+-    if (Left.is(tok::r_paren) && Right.is(tok::identifier))
+-      // Don't space between ')' and <id>
+-      return false;
++    if (Left.is(tok::r_paren) && Right.is(tok::identifier)) {
++      int rParenCount = 0;
++      for (FormatToken *previousToken = Right.Previous; previousToken;
++        previousToken = previousToken->Previous) {
++        if (previousToken->is(TT_ObjCMethodSpecifier))
++          break;
++        if (previousToken->is(tok::r_paren))
++          rParenCount++;
++      }
++      return Style.ObjCSpaceBeforeMethodDeclaration && (rParenCount < 2) &&
++        ((Right.is(TT_SelectorName)) ||
++          (Right.Next && Right.Next->is(tok::semi)) || !Right.Next);
++    }
+   }
+   if (Line.Type == LT_ObjCProperty &&
+       (Right.is(tok::equal) || Left.is(tok::equal)))
+Index: unittests/Format/FormatTest.cpp
+===================================================================
+--- unittests/Format/FormatTest.cpp	(revision 240024)
++++ unittests/Format/FormatTest.cpp	(working copy)
+@@ -9023,6 +9023,7 @@
+   CHECK_PARSE_BOOL(IndentWrappedFunctionNames);
+   CHECK_PARSE_BOOL(KeepEmptyLinesAtTheStartOfBlocks);
+   CHECK_PARSE_BOOL(ObjCSpaceAfterProperty);
++  CHECK_PARSE_BOOL(ObjCSpaceBeforeMethodDeclaration);
+   CHECK_PARSE_BOOL(ObjCSpaceBeforeProtocolList);
+   CHECK_PARSE_BOOL(Cpp11BracedListStyle);
+   CHECK_PARSE_BOOL(SpacesInParentheses);
