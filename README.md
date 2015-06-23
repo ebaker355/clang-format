@@ -77,6 +77,22 @@ file:
 
     ForceEmptyLineAtEOF: true
 
+###SpaceAfterObjCBlockCaret (bool)
+If `true`, a space is inserted after an ObjC block caret.
+
+This:
+
+    completion:^(BOOL) { ... }
+
+Becomes:
+
+    completion:^ (BOOL) { ... }
+
+This option is OFF by default. To enable, add this line to your `.clang-format`
+file:
+
+SpaceAfterObjCBlockCaret: true
+
 ###Xcode Plugin
 
 I am using this binary with this Xcode plugin:
