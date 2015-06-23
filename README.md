@@ -91,7 +91,7 @@ Becomes:
 This option is OFF by default. To enable, add this line to your `.clang-format`
 file:
 
-SpaceAfterObjCBlockCaret: true
+    SpaceAfterObjCBlockCaret: true
 
 ###Xcode Plugin
 
