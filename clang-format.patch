@@ -18,7 +18,17 @@ Index: docs/ClangFormatStyleOptions.rst
  **BreakConstructorInitializersBeforeComma** (``bool``)
    Always break constructor initializers before commas and align
    the commas with the colon.
-@@ -410,6 +415,10 @@
+@@ -341,6 +346,9 @@
+   NOTE: This is an experimental flag, that might go away or be renamed. Do
+   not use this in config files, etc. Use at your own risk.
+ 
++**ForceEmptyLineAtEOF** (``bool``)
++  Ensures that there is always at lease 1 empty line at the end of the file.
++
+ **ForEachMacros** (``std::vector<std::string>``)
+   A vector of macros that should be interpreted as foreach loops
+   instead of as function calls.
+@@ -410,6 +418,10 @@
    Add a space after ``@property`` in Objective-C, i.e. use
    ``\@property (readonly)`` instead of ``\@property(readonly)``.
  
@@ -33,7 +43,18 @@ Index: include/clang/Format/Format.h
 ===================================================================
 --- include/clang/Format/Format.h	(revision 240315)
 +++ include/clang/Format/Format.h	(working copy)
-@@ -226,6 +226,10 @@
+@@ -73,6 +73,10 @@
+   /// \brief If true, empty lines at the start of blocks are kept.
+   bool KeepEmptyLinesAtTheStartOfBlocks;
+ 
++  /// \brief If \c true, ensures that there is always at lease 1 empty line at
++  /// the end of the file.
++  bool ForceEmptyLineAtEOF;
++
+   /// \brief The penalty for each line break introduced inside a comment.
+   unsigned PenaltyBreakComment;
+ 
+@@ -226,6 +230,10 @@
    /// <tt>\@property (readonly)</tt> instead of <tt>\@property(readonly)</tt>.
    bool ObjCSpaceAfterProperty;
  
@@ -44,19 +65,21 @@ Index: include/clang/Format/Format.h
    /// \brief Add a space in front of an Objective-C protocol list, i.e. use
    /// <tt>Foo <Protocol></tt> instead of \c Foo<Protocol>.
    bool ObjCSpaceBeforeProtocolList;
-@@ -344,6 +348,11 @@
+@@ -344,6 +352,13 @@
    /// \brief The brace breaking style to use.
    BraceBreakingStyle BreakBeforeBraces;
  
 +  /// \brief If \c true, will place a break before 'else', like \c Stroustrup.
 +  bool BreakBeforeElse;
 +
++  /// \brief If \c true, will place a break before 'while' in a 'do...while'
++  /// loop.
 +  bool BreakBetweenDoWhile;
 +
    /// \brief If \c true, format braced lists as best suited for C++11 braced
    /// lists.
    ///
-@@ -449,6 +458,8 @@
+@@ -449,6 +464,8 @@
             BreakBeforeBinaryOperators == R.BreakBeforeBinaryOperators &&
             BreakBeforeTernaryOperators == R.BreakBeforeTernaryOperators &&
             BreakBeforeBraces == R.BreakBeforeBraces &&
@@ -65,7 +88,15 @@ Index: include/clang/Format/Format.h
             BreakConstructorInitializersBeforeComma ==
                 R.BreakConstructorInitializersBeforeComma &&
             ColumnLimit == R.ColumnLimit &&
-@@ -468,6 +479,7 @@
+@@ -459,6 +476,7 @@
+            DerivePointerAlignment == R.DerivePointerAlignment &&
+            ExperimentalAutoDetectBinPacking ==
+                R.ExperimentalAutoDetectBinPacking &&
++           ForceEmptyLineAtEOF == R.ForceEmptyLineAtEOF &&
+            IndentCaseLabels == R.IndentCaseLabels &&
+            IndentWrappedFunctionNames == R.IndentWrappedFunctionNames &&
+            IndentWidth == R.IndentWidth && Language == R.Language &&
+@@ -468,6 +486,7 @@
             NamespaceIndentation == R.NamespaceIndentation &&
             ObjCBlockIndentWidth == R.ObjCBlockIndentWidth &&
             ObjCSpaceAfterProperty == R.ObjCSpaceAfterProperty &&
@@ -88,7 +119,15 @@ Index: lib/Format/Format.cpp
      IO.mapOptional("BreakConstructorInitializersBeforeComma",
                     Style.BreakConstructorInitializersBeforeComma);
      IO.mapOptional("BinPackParameters", Style.BinPackParameters);
-@@ -221,6 +223,7 @@
+@@ -210,6 +212,7 @@
+     IO.mapOptional("DerivePointerAlignment", Style.DerivePointerAlignment);
+     IO.mapOptional("ExperimentalAutoDetectBinPacking",
+                    Style.ExperimentalAutoDetectBinPacking);
++    IO.mapOptional("ForceEmptyLineAtEOF", Style.ForceEmptyLineAtEOF);
+     IO.mapOptional("IndentCaseLabels", Style.IndentCaseLabels);
+     IO.mapOptional("IndentWrappedFunctionNames",
+                    Style.IndentWrappedFunctionNames);
+@@ -221,6 +224,7 @@
      IO.mapOptional("NamespaceIndentation", Style.NamespaceIndentation);
      IO.mapOptional("ObjCBlockIndentWidth", Style.ObjCBlockIndentWidth);
      IO.mapOptional("ObjCSpaceAfterProperty", Style.ObjCSpaceAfterProperty);
@@ -96,7 +135,7 @@ Index: lib/Format/Format.cpp
      IO.mapOptional("ObjCSpaceBeforeProtocolList",
                     Style.ObjCSpaceBeforeProtocolList);
      IO.mapOptional("PenaltyBreakBeforeFirstCallParameter",
-@@ -344,8 +347,10 @@
+@@ -344,8 +348,10 @@
    LLVMStyle.BinPackParameters = true;
    LLVMStyle.BinPackArguments = true;
    LLVMStyle.BreakBeforeBinaryOperators = FormatStyle::BOS_None;
@@ -107,7 +146,15 @@ Index: lib/Format/Format.cpp
    LLVMStyle.BreakConstructorInitializersBeforeComma = false;
    LLVMStyle.ColumnLimit = 80;
    LLVMStyle.CommentPragmas = "^ IWYU pragma:";
-@@ -367,6 +372,7 @@
+@@ -355,6 +361,7 @@
+   LLVMStyle.Cpp11BracedListStyle = true;
+   LLVMStyle.DerivePointerAlignment = false;
+   LLVMStyle.ExperimentalAutoDetectBinPacking = false;
++  LLVMStyle.ForceEmptyLineAtEOF = false;
+   LLVMStyle.ForEachMacros.push_back("foreach");
+   LLVMStyle.ForEachMacros.push_back("Q_FOREACH");
+   LLVMStyle.ForEachMacros.push_back("BOOST_FOREACH");
+@@ -367,6 +374,7 @@
    LLVMStyle.NamespaceIndentation = FormatStyle::NI_None;
    LLVMStyle.ObjCBlockIndentWidth = 2;
    LLVMStyle.ObjCSpaceAfterProperty = false;
@@ -115,7 +162,7 @@ Index: lib/Format/Format.cpp
    LLVMStyle.ObjCSpaceBeforeProtocolList = true;
    LLVMStyle.PointerAlignment = FormatStyle::PAS_Right;
    LLVMStyle.SpacesBeforeTrailingComments = 1;
-@@ -409,6 +415,7 @@
+@@ -409,6 +417,7 @@
    GoogleStyle.IndentCaseLabels = true;
    GoogleStyle.KeepEmptyLinesAtTheStartOfBlocks = false;
    GoogleStyle.ObjCSpaceAfterProperty = false;
@@ -123,7 +170,7 @@ Index: lib/Format/Format.cpp
    GoogleStyle.ObjCSpaceBeforeProtocolList = false;
    GoogleStyle.PointerAlignment = FormatStyle::PAS_Left;
    GoogleStyle.SpacesBeforeTrailingComments = 2;
-@@ -467,6 +474,7 @@
+@@ -467,6 +476,7 @@
    MozillaStyle.DerivePointerAlignment = true;
    MozillaStyle.IndentCaseLabels = true;
    MozillaStyle.ObjCSpaceAfterProperty = true;
@@ -131,7 +178,7 @@ Index: lib/Format/Format.cpp
    MozillaStyle.ObjCSpaceBeforeProtocolList = false;
    MozillaStyle.PenaltyReturnTypeOnItsOwnLine = 200;
    MozillaStyle.PointerAlignment = FormatStyle::PAS_Left;
-@@ -489,6 +497,7 @@
+@@ -489,6 +499,7 @@
    Style.NamespaceIndentation = FormatStyle::NI_Inner;
    Style.ObjCBlockIndentWidth = 4;
    Style.ObjCSpaceAfterProperty = true;
@@ -164,6 +211,19 @@ Index: lib/Format/TokenAnnotator.cpp
    }
    if (Line.Type == LT_ObjCProperty &&
        (Right.is(tok::equal) || Left.is(tok::equal)))
+Index: lib/Format/UnwrappedLineFormatter.cpp
+===================================================================
+--- lib/Format/UnwrappedLineFormatter.cpp	(revision 240315)
++++ lib/Format/UnwrappedLineFormatter.cpp	(working copy)
+@@ -891,6 +891,8 @@
+                                               bool InPPDirective) {
+   if (RootToken.is(tok::eof)) {
+     unsigned Newlines = std::min(RootToken.NewlinesBefore, 1u);
++    if (Style.ForceEmptyLineAtEOF && Newlines < 1)
++      Newlines = 1;
+     Whitespaces->replaceWhitespace(RootToken, Newlines, /*IndentLevel=*/0,
+                                    /*Spaces=*/0, /*TargetColumn=*/0);
+     return;
 Index: lib/Format/UnwrappedLineParser.cpp
 ===================================================================
 --- lib/Format/UnwrappedLineParser.cpp	(revision 240315)
@@ -191,7 +251,7 @@ Index: unittests/Format/FormatTest.cpp
 ===================================================================
 --- unittests/Format/FormatTest.cpp	(revision 240315)
 +++ unittests/Format/FormatTest.cpp	(working copy)
-@@ -9022,7 +9022,9 @@
+@@ -9022,15 +9022,19 @@
    CHECK_PARSE_BOOL(AlwaysBreakTemplateDeclarations);
    CHECK_PARSE_BOOL(BinPackParameters);
    CHECK_PARSE_BOOL(BinPackArguments);
@@ -201,7 +261,9 @@ Index: unittests/Format/FormatTest.cpp
    CHECK_PARSE_BOOL(BreakConstructorInitializersBeforeComma);
    CHECK_PARSE_BOOL(ConstructorInitializerAllOnOneLineOrOnePerLine);
    CHECK_PARSE_BOOL(DerivePointerAlignment);
-@@ -9031,6 +9033,7 @@
+   CHECK_PARSE_BOOL_FIELD(DerivePointerAlignment, "DerivePointerBinding");
++  CHECK_PARSE_BOOL(ForceEmptyLineAtEOF);
+   CHECK_PARSE_BOOL(IndentCaseLabels);
    CHECK_PARSE_BOOL(IndentWrappedFunctionNames);
    CHECK_PARSE_BOOL(KeepEmptyLinesAtTheStartOfBlocks);
    CHECK_PARSE_BOOL(ObjCSpaceAfterProperty);
