@@ -98,8 +98,10 @@ file:
 I am using this binary with this Xcode plugin:
 https://github.com/travisjeffery/ClangFormat-Xcode
 
-You may download the [binary](https://github.com/ebaker355/clang-format/raw/master/clang-format),
-or follow these steps to build your own patched version:
+You may download the [binary](https://github.com/ebaker355/clang-format/raw/master/clang-format)
+~~, or follow these steps to build your own patched version:~~
+
+####UPDATE: My patch is currently out of date. 😒 I will update it soon.
 
 ######Most of these steps were taken from http://blog.hardcodes.de/articles/63/building-clang-format-and-friends-on-osx-mountain-lion
 
